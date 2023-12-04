@@ -1,0 +1,56 @@
+name: dplt
+description: dplt
+author: yyj
+
+
+inputs:
+  deploy_dir:
+    description: deploy dir
+    required: true
+
+  packages_dir:
+    description: packages dir
+    required: true
+
+  cluster:
+    description: hosts group ref_name
+    required: true
+
+  config_dir:
+    description: ansible config
+    default: ".github/ansible"
+
+  remote_user:
+    default: "root"
+
+runs:
+  using: composite
+  steps: 
+    - name: tar
+      run: |
+        repo=${{ github.repository }}
+        commit=$(echo ${{ github.sha }}|cut -c 1-7)
+        pkg=${repo#*/}_${{ github.ref_name }}_$commit
+
+        tmp_dir="/tmp/$pkg"
+        if [ -d "$tmp_dir" ]; then
+          rm -rf "$tmp_dir"
+        fi
+
+        mkdir -p "$tmp_dir"
+        cp -r ./* "$tmp_dir"
+        cd /tmp && tar czf "${pkg}.tgz" "$pkg"
+      shell: bash
+
+    - name: deploy
+      run: |
+        repo=${{ github.repository }}
+        commit=$(echo ${{ github.sha }}|cut -c 1-7)
+        project=${repo#*/}
+        pkg=${project}_${{ github.ref_name }}_$commit
+
+        rule=${{inputs.config_dir}}/dplt.yml
+        inventory=${{inputs.config_dir}}/inventory.ini
+
+        ansible-playbook $rule -i ${inventory} --extra-var "cluster=${{inputs.cluster}} deploy_dir=${{inputs.deploy_dir}} pkgs_dir=${{inputs.packages_dir}} pkg=${pkg} project=${project} remote_user=${{inputs.remote_user}}" -u root -f 5 
+      shell: bash
